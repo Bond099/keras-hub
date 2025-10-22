@@ -7,7 +7,9 @@ def get_act_name(act_type, layer_idx=None, head_idx=None):
     return base + f"hook_{act_type}"
 
 def to_tokens(inputs, preprocessor):
-    return preprocessor.generate_preprocess(inputs)
+    preprocessed = preprocessor.generate_preprocess(inputs)
+    return preprocessed['token_ids']
 
 def to_str_tokens(tokens, preprocessor):
-    return preprocessor.generate_postprocess(tokens)
+    postprocessed = preprocessor.generate_postprocess({'token_ids': tokens})
+    return postprocessed  # Assume strings
