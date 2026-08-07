@@ -1,7 +1,9 @@
+import gc
 import json
 import os
 import pathlib
 import re
+import tempfile
 
 import keras
 import numpy as np
@@ -9,10 +11,8 @@ import tensorflow as tf
 from absl.testing import parameterized
 from keras import ops
 from keras import tree
+from keras.layers import ReversibleEmbedding
 
-from keras_hub.src.layers.modeling.reversible_embedding import (
-    ReversibleEmbedding,
-)
 from keras_hub.src.models.retinanet.feature_pyramid import FeaturePyramid
 from keras_hub.src.tokenizers.tokenizer import Tokenizer
 from keras_hub.src.utils.tensor_utils import is_float_dtype
@@ -433,6 +433,460 @@ class TestCase(tf.test.TestCase, parameterized.TestCase):
         restored_output = restored_model(input_data)
         self.assertAllClose(model_output, restored_output, atol=atol, rtol=rtol)
 
+    def _verify_litert_outputs(
+        self,
+        keras_output,
+        litert_output,
+        sig_outputs,
+        expected_output_shape=None,
+        verify_numerics=True,
+        comparison_mode="strict",
+        output_thresholds=None,
+    ):
+        """Verify LiteRT outputs against expected shape and Keras outputs.
+
+        Args:
+            keras_output: Keras model output (can be None if not verifying
+                numerics)
+            litert_output: LiteRT interpreter output
+            sig_outputs: Output names from SignatureDef
+            expected_output_shape: Expected output shape (optional)
+            verify_numerics: Whether to verify numerical correctness
+            comparison_mode: "strict" or "statistical"
+            output_thresholds: Thresholds for statistical comparison
+        """
+        # Handle single output case: if Keras has single output but LiteRT
+        # returns dict
+        if (
+            not isinstance(keras_output, dict)
+            and isinstance(litert_output, dict)
+            and len(litert_output) == 1
+        ):
+            litert_output = list(litert_output.values())[0]
+
+        # Verify output shape if specified
+        if expected_output_shape is not None:
+            self.assertEqual(litert_output.shape, expected_output_shape)
+
+        # Verify numerical correctness if requested
+        if verify_numerics:
+            self._verify_litert_numerics(
+                keras_output,
+                litert_output,
+                sig_outputs,
+                output_thresholds,
+                comparison_mode,
+            )
+
+    def _verify_litert_numerics(
+        self,
+        keras_output,
+        litert_output,
+        sig_outputs,
+        output_thresholds,
+        comparison_mode,
+    ):
+        """Verify numerical accuracy between Keras and LiteRT outputs.
+
+        This method compares outputs using the SignatureDef output names to
+        match Keras outputs with LiteRT outputs properly.
+
+        Args:
+            keras_output: Keras model output (tensor or dict)
+            litert_output: LiteRT interpreter output (tensor or dict)
+            sig_outputs: List of output names from SignatureDef
+            output_thresholds: Dict of thresholds for comparison
+            comparison_mode: "strict" or "statistical"
+        """
+        if isinstance(keras_output, dict) and isinstance(litert_output, dict):
+            # Both outputs are dicts - compare using SignatureDef output names
+            for output_name in sig_outputs:
+                if output_name not in keras_output:
+                    self.fail(
+                        f"SignatureDef output '{output_name}' not found in "
+                        f"Keras outputs.\n"
+                        f"Keras keys: {list(keras_output.keys())}"
+                    )
+                if output_name not in litert_output:
+                    self.fail(
+                        f"SignatureDef output '{output_name}' not found in "
+                        f"LiteRT outputs.\n"
+                        f"LiteRT keys: {list(litert_output.keys())}"
+                    )
+
+                keras_val_np = ops.convert_to_numpy(keras_output[output_name])
+                litert_val = litert_output[output_name]
+                output_threshold = output_thresholds.get(
+                    output_name,
+                    output_thresholds.get("*", {"max": 10.0, "mean": 0.1}),
+                )
+                self._compare_outputs(
+                    keras_val_np,
+                    litert_val,
+                    comparison_mode,
+                    output_name,
+                    output_threshold["max"],
+                    output_threshold["mean"],
+                )
+        elif not isinstance(keras_output, dict) and not isinstance(
+            litert_output, dict
+        ):
+            # Both outputs are single tensors - direct comparison
+            keras_output_np = ops.convert_to_numpy(keras_output)
+            output_threshold = output_thresholds.get(
+                "*", {"max": 1e-2, "mean": 1e-3}
+            )
+            self._compare_outputs(
+                keras_output_np,
+                litert_output,
+                comparison_mode,
+                key=None,
+                max_threshold=output_threshold["max"],
+                mean_threshold=output_threshold["mean"],
+            )
+        else:
+            keras_type = type(keras_output).__name__
+            litert_type = type(litert_output).__name__
+            self.fail(
+                f"Output structure mismatch: Keras returns "
+                f"{keras_type}, LiteRT returns {litert_type}"
+            )
+
+    @staticmethod
+    def _build_litert_torch_input_signature(input_data):
+        """Build a concrete input signature for torch-backend LiteRT export.
+
+        The torch export path does not support dynamic shapes, so it needs a
+        fully specified `keras.InputSpec` tree derived from the sample data.
+        """
+        dtype_map = {
+            "float64": "float32",
+            "int64": "int32",
+        }
+
+        def _to_spec(x):
+            x = ops.convert_to_numpy(x)
+            dtype = keras.backend.standardize_dtype(x.dtype)
+            dtype = dtype_map.get(dtype, dtype)
+            return keras.InputSpec(shape=x.shape, dtype=dtype)
+
+        return [tree.map_structure(_to_spec, input_data)]
+
+    @staticmethod
+    def _map_litert_torch_inputs(converted_input_data, sig_inputs):
+        """Map dict inputs to their torch-export signature input names.
+
+        Depending on the litert-torch version, a flattened dict input is
+        named either with the original key suffixed (`args_0_<key>`) or
+        purely positionally (`args_0`, `args_1`, ...). Prefer an exact key
+        match; otherwise fall back to positional order (the model's input
+        definition order, which the test ``input_data`` mirrors).
+        """
+        keys = list(converted_input_data.keys())
+        stripped = {re.sub(r"^args_\d+_", "", n): n for n in sig_inputs}
+        if all(key in stripped for key in keys):
+            return {stripped[key]: converted_input_data[key] for key in keys}
+
+        def _index(name):
+            match = re.search(r"\d+", name)
+            return int(match.group()) if match else 0
+
+        ordered = sorted(sig_inputs, key=_index)
+        return {
+            ordered[i]: converted_input_data[key] for i, key in enumerate(keys)
+        }
+
+    def run_litert_export_test(
+        self,
+        cls=None,
+        init_kwargs=None,
+        input_data=None,
+        expected_output_shape=None,
+        model=None,
+        verify_numerics=True,
+        # No LiteRT output in model saving test; remove undefined return
+        output_thresholds=None,
+        **export_kwargs,
+    ):
+        """Export model to LiteRT format and verify outputs.
+
+        Args:
+            cls: Model class to test (optional if model is provided)
+            init_kwargs: Initialization arguments for the model (optional
+                if model is provided)
+            input_data: Input data to test with (dict or tensor)
+            expected_output_shape: Expected output shape from LiteRT inference
+            model: Pre-created model instance (optional, if provided cls and
+                init_kwargs are ignored)
+            verify_numerics: Whether to verify numerical correctness
+                between Keras and LiteRT outputs. Set to False for preset
+                models with load_weights=False where outputs are random.
+            comparison_mode: "strict" (default) or "statistical".
+                - "strict": All elements must be within default tolerances
+                    (1e-6)
+                - "statistical": Check mean/max absolute differences against
+                    provided thresholds
+            output_thresholds: Dict mapping output names to threshold dicts
+                with "max" and "mean" keys. Use "*" as wildcard for defaults.
+                Example: {"output1": {"max": 1e-4, "mean": 1e-5},
+                         "*": {"max": 1e-3, "mean": 1e-4}}
+            **export_kwargs: Additional keyword arguments to pass to
+                model.export().
+        """
+        # Extract comparison_mode from export_kwargs if provided
+        comparison_mode = export_kwargs.pop("comparison_mode", "strict")
+        backend = keras.backend.backend()
+
+        # The rewritten LiteRT export path currently runs on the PyTorch
+        # backend only.
+        if backend != "torch":
+            self.skipTest(
+                "LiteRT export is supported on the PyTorch backend only."
+            )
+
+        # The torch export path is provided by the optional litert-torch
+        # package.
+        try:
+            import litert_torch  # noqa: F401
+        except (ImportError, ModuleNotFoundError):
+            self.skipTest(
+                "litert-torch is required for LiteRT export with the "
+                "torch backend"
+            )
+
+        # Use the ai-edge-litert interpreter exclusively. The legacy
+        # tf.lite.Interpreter is deprecated and removed in recent TensorFlow
+        # releases, so we intentionally do not fall back to it.
+        try:
+            from ai_edge_litert.interpreter import Interpreter
+        except ImportError:
+            self.skipTest(
+                "LiteRT export tests require the 'ai-edge-litert' package."
+            )
+
+        if output_thresholds is None:
+            output_thresholds = {"*": {"max": 10.0, "mean": 0.1}}
+
+        if model is None:
+            if cls is None or init_kwargs is None:
+                raise ValueError(
+                    "Either 'model' or 'cls' and 'init_kwargs' must be provided"
+                )
+            model = cls(**init_kwargs)
+            _ = model(input_data)
+
+        interpreter = None
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                export_path = os.path.join(temp_dir, "model.tflite")
+
+                # The torch export path needs a concrete input signature, since
+                # it does not support dynamic shapes.
+                if "input_signature" not in export_kwargs:
+                    export_kwargs["input_signature"] = (
+                        self._build_litert_torch_input_signature(input_data)
+                    )
+
+                # Step 1: Export model and get Keras output
+                model.export(export_path, format="litert", **export_kwargs)
+                self.assertTrue(os.path.exists(export_path))
+                self.assertGreater(os.path.getsize(export_path), 0)
+
+                keras_output = model(input_data) if verify_numerics else None
+
+                # Step 2: Load interpreter and verify SignatureDef
+                interpreter = Interpreter(model_path=export_path)
+                signature_defs = interpreter.get_signature_list()
+                self.assertIn(
+                    "serving_default",
+                    signature_defs,
+                    "Missing serving_default signature",
+                )
+
+                serving_sig = signature_defs["serving_default"]
+                sig_inputs = serving_sig.get("inputs", [])
+                sig_outputs = serving_sig.get("outputs", [])
+
+                self.assertGreater(
+                    len(sig_inputs),
+                    0,
+                    "Should have at least one input in SignatureDef",
+                )
+                self.assertGreater(
+                    len(sig_outputs),
+                    0,
+                    "Should have at least one output in SignatureDef",
+                )
+
+                # Verify input signature
+                if isinstance(input_data, dict):
+                    # torch export renames inputs to `args_0_<key>`, so we
+                    # only check the input count here.
+                    self.assertEqual(
+                        len(input_data),
+                        len(sig_inputs),
+                        f"Input count mismatch: model has "
+                        f"{len(input_data)} inputs but SignatureDef has "
+                        f"{len(sig_inputs)}: {sig_inputs}",
+                    )
+                else:
+                    # For numpy arrays, just verify we have exactly one input
+                    # (since we're passing a single tensor)
+                    if len(sig_inputs) != 1:
+                        self.fail(
+                            "Expected 1 input for numpy array input_data, "
+                            f"but SignatureDef has {len(sig_inputs)}: "
+                            f"{sig_inputs}"
+                        )
+
+                # Verify output signature
+                if verify_numerics and isinstance(keras_output, dict):
+                    expected_outputs = set(keras_output.keys())
+                    actual_outputs = set(sig_outputs)
+                    if expected_outputs != actual_outputs:
+                        self.fail(
+                            f"Output name mismatch: Expected "
+                            f"{sorted(expected_outputs)}, "
+                            f"but SignatureDef has {sorted(actual_outputs)}"
+                        )
+
+                # Step 3: Run LiteRT inference
+                os.remove(export_path)
+                # Simple inference implementation
+                runner = interpreter.get_signature_runner("serving_default")
+
+                # Convert input data dtypes to match TFLite expectations
+                dtype_map = {
+                    "bool": "int32",
+                    "float64": "float32",
+                    "int64": "int32",
+                }
+
+                def convert_for_tflite(x):
+                    """Convert tensor/array to TFLite-compatible dtypes."""
+                    x = ops.convert_to_numpy(x)
+                    dtype = keras.backend.standardize_dtype(x.dtype)
+                    target = dtype_map.get(dtype)
+                    if target is not None:
+                        x = x.astype(target)
+                    return x
+
+                if isinstance(input_data, dict):
+                    converted_input_data = tree.map_structure(
+                        convert_for_tflite, input_data
+                    )
+                    # litert-torch renames dict inputs (positionally as
+                    # `args_<n>` or as `args_<n>_<key>`); map them back and
+                    # cast to the interpreter's expected dtype.
+                    runner_kwargs = self._map_litert_torch_inputs(
+                        converted_input_data, sig_inputs
+                    )
+                    expected_dtypes = {
+                        d["name"]: d["dtype"]
+                        for d in interpreter.get_input_details()
+                    }
+                    for sig_name, value in list(runner_kwargs.items()):
+                        for dname, dtype in expected_dtypes.items():
+                            if sig_name in dname and value.dtype != dtype:
+                                runner_kwargs[sig_name] = value.astype(dtype)
+                                break
+                    litert_output = runner(**runner_kwargs)
+                else:
+                    # For single tensor inputs, get the input name
+                    sig_inputs = serving_sig.get("inputs", [])
+                    input_name = sig_inputs[
+                        0
+                    ]  # We verified len(sig_inputs) == 1 above
+                    converted_input = convert_for_tflite(input_data)
+                    litert_output = runner(**{input_name: converted_input})
+
+                # Step 4: Verify outputs
+                self._verify_litert_outputs(
+                    keras_output,
+                    litert_output,
+                    sig_outputs,
+                    expected_output_shape=expected_output_shape,
+                    verify_numerics=verify_numerics,
+                    comparison_mode=comparison_mode,
+                    output_thresholds=output_thresholds,
+                )
+        finally:
+            if interpreter is not None:
+                del interpreter
+            if model is not None and cls is not None:
+                del model
+            gc.collect()
+
+    def _compare_outputs(
+        self,
+        keras_val,
+        litert_val,
+        comparison_mode,
+        key=None,
+        max_threshold=10.0,
+        mean_threshold=0.1,
+    ):
+        """Compare Keras and LiteRT outputs using specified comparison mode.
+
+        Args:
+            keras_val: Keras model output (numpy array)
+            litert_val: LiteRT model output (numpy array)
+            comparison_mode: "strict" or "statistical"
+            key: Output key name for error messages (optional)
+            max_threshold: Maximum absolute difference threshold for statistical
+                mode
+            mean_threshold: Mean absolute difference threshold for statistical
+                mode
+        """
+        key_msg = f" for output key '{key}'" if key else ""
+
+        # Check if shapes are compatible for comparison
+        self.assertEqual(
+            keras_val.shape,
+            litert_val.shape,
+            f"Shape mismatch{key_msg}: Keras shape "
+            f"{keras_val.shape}, LiteRT shape {litert_val.shape}. "
+            "Numerical comparison cannot proceed due to incompatible shapes.",
+        )
+
+        if comparison_mode == "strict":
+            # Original strict element-wise comparison with default tolerances
+            self.assertAllClose(
+                keras_val,
+                litert_val,
+                atol=1e-6,
+                rtol=1e-6,
+                msg=f"Mismatch{key_msg}",
+            )
+        elif comparison_mode == "statistical":
+            # Statistical comparison
+
+            # Calculate element-wise absolute differences
+            abs_diff = np.abs(keras_val - litert_val)
+
+            # Element-wise statistics
+            mean_abs_diff = np.mean(abs_diff)
+            max_abs_diff = np.max(abs_diff)
+
+            # Assert reasonable bounds on statistical differences
+            self.assertLessEqual(
+                mean_abs_diff,
+                mean_threshold,
+                f"Mean absolute difference too high: {mean_abs_diff:.6e}"
+                f"{key_msg} (threshold: {mean_threshold})",
+            )
+            self.assertLessEqual(
+                max_abs_diff,
+                max_threshold,
+                f"Max absolute difference too high: {max_abs_diff:.6e}"
+                f"{key_msg} (threshold: {max_threshold})",
+            )
+        else:
+            raise ValueError(
+                f"Unknown comparison_mode: {comparison_mode}. Must be "
+                "'strict' or 'statistical'"
+            )
+
     def run_backbone_test(
         self,
         cls,
@@ -625,9 +1079,12 @@ class TestCase(tf.test.TestCase, parameterized.TestCase):
         train_data,
         expected_output_shape=None,
         batch_size=2,
+        compile_kwargs=None,
     ):
         """Run basic tests for a backbone, including compilation."""
         task = cls(**init_kwargs)
+        if compile_kwargs:
+            task.compile(**compile_kwargs)
         # Check serialization (without a full save).
         self.run_serialization_test(task)
         preprocessor = task.preprocessor

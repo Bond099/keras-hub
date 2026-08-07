@@ -18,8 +18,16 @@ from keras_hub.src.utils.tensor_utils import get_tensor_size_in_bits
 try:
     import kagglehub
     from kagglehub.exceptions import KaggleApiHTTPError
-except ImportError:
-    kagglehub = None
+except ImportError as e:
+    if getattr(e, "name", None) == "kagglehub":
+        kagglehub = None
+    else:
+        raise ImportError(
+            f"The `kagglehub` package is installed but failed to import "
+            f"due to a dependency error: {e}. This is likely caused by "
+            f"an incompatible version of `kagglesdk`. Please try: "
+            f"`pip install --upgrade kagglehub kagglesdk`."
+        ) from e
 
 try:
     import huggingface_hub
@@ -45,6 +53,7 @@ CONFIG_FILE = "config.json"
 TOKENIZER_CONFIG_FILE = "tokenizer.json"
 AUDIO_CONVERTER_CONFIG_FILE = "audio_converter.json"
 IMAGE_CONVERTER_CONFIG_FILE = "image_converter.json"
+VIDEO_CONVERTER_CONFIG_FILE = "video_converter.json"
 TASK_CONFIG_FILE = "task.json"
 PREPROCESSOR_CONFIG_FILE = "preprocessor.json"
 METADATA_FILE = "metadata.json"
@@ -123,7 +132,6 @@ def find_subclass(preset, cls, backbone_cls):
 
 def get_file(preset, path):
     """Download a preset file in necessary and return the local path."""
-    # TODO: Add tests for FileNotFound exceptions.
     if not isinstance(preset, str):
         raise ValueError(
             f"A preset identifier must be a string. Received: preset={preset}"
@@ -155,20 +163,31 @@ def get_file(preset, path):
             return kagglehub.model_download(kaggle_handle, path)
         except KaggleApiHTTPError as e:
             message = str(e)
-            if message.find("403 Client Error"):
+            # Kaggle serves a missing file as a 404 and a gated file as a
+            # 403. Both raise FileNotFoundError so `check_file_exists` can
+            # probe optional preset files, but the 403 message points at
+            # the real fix. Anything else is an API error and surfaces
+            # as-is.
+            if "404 Client Error" in message:
                 raise FileNotFoundError(
                     f"`{path}` doesn't exist in preset directory `{preset}`."
+                )
+            elif "403 Client Error" in message:
+                raise FileNotFoundError(
+                    f"`{path}` is not accessible in preset directory "
+                    f"`{preset}`. If this model is gated, accept its "
+                    "terms on kaggle.com and retry."
                 )
             else:
                 raise ValueError(message)
         except ValueError as e:
             message = str(e)
-            if message.find("is not present in the model files"):
+            if "is not present in the model files" in message:
                 raise FileNotFoundError(
                     f"`{path}` doesn't exist in preset directory `{preset}`."
                 )
             else:
-                raise ValueError(message)
+                raise
     elif scheme in tf_registered_schemes():
         return tf_copy_gfile_to_cache(preset, path)
     elif scheme == MODELSCOPE_SCHEME:
@@ -194,14 +213,6 @@ def get_file(preset, path):
                 "(e.g., 'modelscope://username/bert_base_en')."
                 f"Received: preset='{preset}.'"
             ) from e
-        except EntryNotFoundError as e:
-            message = str(e)
-            if message.find("403 Client Error"):
-                raise FileNotFoundError(
-                    f"`{path}` not exist in preset directory `{preset}`."
-                )
-            else:
-                raise ValueError(message)
     elif scheme == HF_SCHEME:
         if huggingface_hub is None:
             raise ImportError(
@@ -221,13 +232,9 @@ def get_file(preset, path):
                 f"'hf://username/bert_base_en'. Received: preset={preset}."
             ) from e
         except EntryNotFoundError as e:
-            message = str(e)
-            if message.find("403 Client Error"):
-                raise FileNotFoundError(
-                    f"`{path}` doesn't exist in preset directory `{preset}`."
-                )
-            else:
-                raise ValueError(message)
+            raise FileNotFoundError(
+                f"`{path}` doesn't exist in preset directory `{preset}`."
+            ) from e
     elif os.path.exists(preset):
         # Assume a local filepath.pyth
         local_path = os.path.join(preset, path)
@@ -271,7 +278,13 @@ def tf_copy_gfile_to_cache(preset, path):
 
     url = os.path.join(preset, path)
     model_dir = preset.replace("://", "_").replace("-", "_").replace("/", "_")
-    local_path = os.path.join(base_dir, "models", model_dir, path)
+    target_dir = os.path.abspath(os.path.join(base_dir, "models", model_dir))
+    local_path = os.path.abspath(os.path.join(target_dir, path))
+
+    if os.path.commonpath([target_dir, local_path]) != target_dir:
+        raise ValueError(
+            f"Invalid path: '{path}'. It escapes the target directory."
+        )
 
     if not os.path.exists(local_path):
         print_msg(f"Downloading data from {url}")
@@ -285,7 +298,7 @@ def tf_copy_gfile_to_cache(preset, path):
             # Work around this bug.
             os.remove(local_path)
             if isinstance(
-                e, tf.errors.PermissionDeniedError, tf.errors.NotFoundError
+                e, (tf.errors.PermissionDeniedError, tf.errors.NotFoundError)
             ):
                 raise FileNotFoundError(
                     f"`{path}` doesn't exist in preset directory `{preset}`.",
@@ -620,6 +633,10 @@ class PresetLoader:
         """Load an image converter layer from the preset."""
         raise NotImplementedError
 
+    def load_video_converter(self, cls, **kwargs):
+        """Load a video converter layer from the preset."""
+        raise NotImplementedError
+
     def load_task(self, cls, load_weights, load_task_weights, **kwargs):
         """Load a task model from the preset.
 
@@ -679,6 +696,10 @@ class KerasPresetLoader(PresetLoader):
 
     def load_image_converter(self, cls, **kwargs):
         converter_config = load_json(self.preset, IMAGE_CONVERTER_CONFIG_FILE)
+        return self._load_serialized_object(converter_config, **kwargs)
+
+    def load_video_converter(self, cls, **kwargs):
+        converter_config = load_json(self.preset, VIDEO_CONVERTER_CONFIG_FILE)
         return self._load_serialized_object(converter_config, **kwargs)
 
     def load_task(self, cls, load_weights, load_task_weights, **kwargs):
@@ -874,6 +895,9 @@ class KerasPresetSaver:
     def save_image_converter(self, converter):
         self._save_serialized_object(converter, IMAGE_CONVERTER_CONFIG_FILE)
 
+    def save_video_converter(self, converter):
+        self._save_serialized_object(converter, VIDEO_CONVERTER_CONFIG_FILE)
+
     def save_task(self, task, max_shard_size=10):
         # Save task specific config and weights.
         self._save_serialized_object(task, TASK_CONFIG_FILE)
@@ -891,7 +915,7 @@ class KerasPresetSaver:
         # Save preprocessor.
         if task.preprocessor and hasattr(task.preprocessor, "save_to_preset"):
             task.preprocessor.save_to_preset(self.preset_dir)
-        else:
+        elif task.preprocessor is not None:
             # Allow saving a `keras.Layer` that is not a preprocessor subclass.
             self.save_preprocessor(task.preprocessor)
 
@@ -930,8 +954,8 @@ class KerasPresetSaver:
         tasks = list_subclasses(Task)
         tasks = filter(lambda x: x.backbone_cls is type(layer), tasks)
         tasks = [task.__base__.__name__ for task in tasks]
-        # Keep task list alphabetical.
-        tasks = sorted(tasks)
+        # Keep task list alphabetical and deduplicated.
+        tasks = sorted(set(tasks))
 
         keras_version = keras.version() if hasattr(keras, "version") else None
         metadata = {

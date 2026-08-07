@@ -283,9 +283,14 @@ class Gemma3CausalLMPreprocessor(CausalLMPreprocessor):
         # is `None`.
         self.text_only_model = self.image_converter is None
 
-        self.image_placeholder = self.tokenizer.image_placeholder
-        self.start_of_image_token = self.tokenizer.start_of_image_token
-        self.end_of_image_token = self.tokenizer.end_of_image_token
+        if self.text_only_model:
+            self.image_placeholder = None
+            self.start_of_image_token = None
+            self.end_of_image_token = None
+        else:
+            self.image_placeholder = self.tokenizer.image_placeholder
+            self.start_of_image_token = self.tokenizer.start_of_image_token
+            self.end_of_image_token = self.tokenizer.end_of_image_token
 
     def build(self, input_shape):
         # Defer packer creation to `build()` so that we can be sure tokenizer
@@ -600,7 +605,7 @@ class Gemma3CausalLMPreprocessor(CausalLMPreprocessor):
 
         # === Vision processing ===
 
-        batch_size = tf.shape(prompts)[0]
+        batch_size = tf.shape(token_ids)[0]
         desired_height = self.image_converter.image_size[0]
         desired_width = self.image_converter.image_size[1]
         if images is None:
@@ -754,7 +759,7 @@ class Gemma3CausalLMPreprocessor(CausalLMPreprocessor):
 
         # === Vision processing ===
 
-        batch_size = tf.shape(prompts)[0]
+        batch_size = tf.shape(token_ids)[0]
         desired_height = self.image_converter.image_size[0]
         desired_width = self.image_converter.image_size[1]
         if images is None:

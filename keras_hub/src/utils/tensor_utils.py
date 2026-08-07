@@ -12,9 +12,11 @@ from packaging import version
 
 try:
     import tensorflow as tf
-    import tensorflow_text as tf_text
 except ImportError:
     tf = None
+try:
+    import tensorflow_text as tf_text
+except ImportError:
     tf_text = None
 
 
@@ -84,6 +86,26 @@ def preprocessing_function(fn):
                 return convert_preprocessing_outputs(x)
 
     return wrapper
+
+
+def convert_to_numpy(x):
+    """Convert `x` to a numpy array.
+
+    Unlike `keras.ops.convert_to_numpy`, this does not require `x` to be a
+    tensor of the current backend. Preprocessing layers, tokenizers and metrics
+    all work in TensorFlow regardless of the active backend, so they routinely
+    hold `tf.Tensor`s that the backend cannot convert. Only backend tensors are
+    handed to the backend; everything else is converted directly.
+    """
+    if isinstance(x, np.ndarray):
+        return x
+    if tf is not None and isinstance(x, tf.RaggedTensor):
+        return x.numpy()
+    if tf is not None and isinstance(x, tf.Tensor):
+        return np.asarray(x)
+    if ops.is_tensor(x):
+        return ops.convert_to_numpy(x)
+    return np.array(x)
 
 
 def convert_preprocessing_inputs(x):
@@ -205,9 +227,57 @@ def convert_preprocessing_outputs(x):
     def convert(x):
         if x is None:
             return x
-        if isinstance(x, tf.RaggedTensor) or x.dtype == tf.string:
+        if isinstance(x, tf.RaggedTensor):
             return tensor_to_list(x)
-        dtype = keras.backend.standardize_dtype(x.dtype)
+        dtype = getattr(x, "dtype", None)
+
+        if dtype is None:
+            return x
+
+        if dtype == tf.string:
+            return tensor_to_list(x)
+
+        dtype = keras.backend.standardize_dtype(dtype)
+        return ops.convert_to_tensor(x, dtype=dtype)
+
+    return keras.tree.map_structure(convert, x)
+
+
+def convert_preprocessing_outputs_python(x):
+    """Convert outputs after preprocessing to a backend agnostic format.
+
+    This function is used to convert `tf.Tensor` and `tf.RaggedTensor` output
+    from preprocessing layers to either:
+
+    - The correct tensor type for the Keras backend framework.
+    - Python lists, in the case of string data.
+
+    Examples:
+    ```python
+    # A batch of three samples each with two string segments.
+    x = (["hi", "yo", "hey"], ["bye", "ciao", ""])
+    keras_hub.utils.convert_preprocessing_outputs_python(x)
+
+    # A batch of features in a dictionary.
+    x = {
+        "text": ["hi", "hello", "hey"],
+        "images": np.ones((3, 64, 64, 3)),
+        "labels": [1, 0, 1],
+    }
+    keras_hub.utils.convert_preprocessing_outputs_python(x)
+    ```
+    """
+    if in_no_convert_scope():
+        return x
+
+    def convert(x):
+        if x is None:
+            return x
+        if isinstance(x, (str, bytes)):
+            return x
+        dtype = None
+        if hasattr(x, "dtype"):
+            dtype = keras.backend.standardize_dtype(x.dtype)
         return ops.convert_to_tensor(x, dtype=dtype)
 
     return keras.tree.map_structure(convert, x)
@@ -229,6 +299,7 @@ def tensor_to_list(inputs):
     Args:
         inputs: Input tensor, or dict/list/tuple of input tensors.
     """
+    assert_tf_installed("tensor_to_list")
     if not isinstance(inputs, (tf.RaggedTensor, tf.Tensor)):
         inputs = tf.convert_to_tensor(inputs)
     if isinstance(inputs, tf.RaggedTensor):
@@ -244,6 +315,7 @@ def tensor_to_list(inputs):
 
 def convert_to_ragged_batch(inputs):
     """Ensure a tf.Tensor is a ragged rank 2 tensor."""
+    assert_tf_installed("convert_to_ragged_batch")
     if not isinstance(inputs, (tf.RaggedTensor, tf.Tensor)):
         inputs = tf.convert_to_tensor(inputs)
     unbatched = inputs.shape.rank == 1
@@ -255,8 +327,67 @@ def convert_to_ragged_batch(inputs):
     return inputs, unbatched, rectangular
 
 
+def canonicalize_python_inputs(inputs):
+    if isinstance(inputs, (tuple, list)):
+        # Fast path for common cases:
+        # If the inputs are just normal python types (or lists of
+        # python types), it immediately returns.
+        if not inputs:
+            return [list(inputs)], False
+        first = inputs[0]
+        if isinstance(first, (int, str, float, bool, np.integer, np.floating)):
+            return [list(inputs)], False
+        if isinstance(first, (tuple, list)) and (
+            not first
+            or isinstance(
+                first[0],
+                (int, str, float, bool, np.integer, np.floating),
+            )
+        ):
+            return [list(x) for x in inputs], True
+
+        # `keras.tree.map_structure` is expensive.
+        inputs = keras.tree.map_structure(convert_to_list, inputs)
+        if inputs and isinstance(inputs[0], (tuple, list)):
+            return inputs, True
+        else:
+            return [inputs], False
+    elif tf is not None and isinstance(inputs, (tf.Tensor, tf.RaggedTensor)):
+        unbatched = inputs.shape.rank == 1
+        if unbatched:
+            inputs = tf.expand_dims(inputs, 0)
+        if isinstance(inputs, tf.Tensor):
+            inputs = inputs.numpy().tolist()
+        else:
+            inputs = inputs.to_list()
+        return inputs, not unbatched
+    elif keras.ops.is_tensor(inputs):
+        inputs = convert_to_list(inputs)
+        if inputs and isinstance(inputs[0], (tuple, list)):
+            return inputs, True
+        else:
+            return [inputs], False
+    else:
+        raise ValueError(
+            f"Input should be a list or a list of lists. Received: {inputs}"
+        )
+
+
+def compute_padding_mask(token_ids, pad_token_id):
+    if isinstance(token_ids, (list, tuple)):
+        if token_ids and isinstance(token_ids[0], (list, tuple)):
+            return [
+                [token != pad_token_id for token in seq] for seq in token_ids
+            ]
+        else:
+            return [token != pad_token_id for token in token_ids]
+    else:
+        return token_ids != pad_token_id
+
+
 def truncate_at_token(inputs, token, mask):
     """Truncate at first instance of `token`, ignoring `mask`."""
+    assert_tf_installed("truncate_at_token")
     matches = (inputs == token) & (~mask)
     end_indices = tf.cast(tf.math.argmax(matches, -1), "int32")
     end_indices = tf.where(end_indices == 0, tf.shape(inputs)[-1], end_indices)
@@ -265,10 +396,42 @@ def truncate_at_token(inputs, token, mask):
 
 def strip_to_ragged(token_ids, mask, ids_to_strip):
     """Remove masked and special tokens from a sequence before detokenizing."""
+    assert_tf_installed("strip_to_ragged")
     mask = tf.cast(mask, "bool")
     for id in ids_to_strip:
         mask = mask & (token_ids != id)
     return tf.ragged.boolean_mask(token_ids, mask)
+
+
+def strip_to_ragged_python(token_ids, mask, ids_to_strip):
+    """Remove masked and special tokens using numpy and Python."""
+    if keras.ops.is_tensor(token_ids):
+        token_ids = keras.ops.convert_to_numpy(token_ids).astype("int32")
+    if keras.ops.is_tensor(mask):
+        mask = keras.ops.convert_to_numpy(mask).astype("bool")
+    if not isinstance(token_ids, np.ndarray):
+        token_ids = np.array(token_ids, dtype="int32")
+    if not isinstance(mask, np.ndarray):
+        mask = np.array(mask, dtype="bool")
+
+    for id in ids_to_strip:
+        mask = mask & (token_ids != id)
+    if token_ids.ndim == 1:
+        token_ids = token_ids[mask].tolist()
+    else:
+        ragged_ids = []
+        for i in range(token_ids.shape[0]):
+            ragged_ids.append(token_ids[i][mask[i]].tolist())
+        token_ids = ragged_ids
+    return token_ids
+
+
+def assert_tf_installed(symbol_name):
+    if tf is None:
+        raise ImportError(
+            f"{symbol_name} requires `tensorflow`. "
+            "Run `pip install tensorflow` to install it."
+        )
 
 
 def assert_tf_libs_installed(symbol_name):
@@ -495,3 +658,16 @@ def target_gather(
         return gather_unbatched(targets, indices, mask, mask_val)
     elif len(targets_shape) == 3:
         return _gather_batched(targets, indices, mask, mask_val)
+
+
+def convert_to_list(inputs):
+    """Converts NumPy array, backend tensor to a list.
+
+    Args:
+        inputs: NumPy array or backend tensor.
+    """
+    if isinstance(inputs, np.ndarray):
+        return inputs.tolist()
+    elif keras.ops.is_tensor(inputs):
+        return keras.ops.convert_to_numpy(inputs).tolist()
+    return inputs

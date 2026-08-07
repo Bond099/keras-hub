@@ -3,6 +3,7 @@ import re
 from typing import Iterable
 
 import keras
+from keras.src.saving import serialization_lib
 
 from keras_hub.src.api_export import keras_hub_export
 from keras_hub.src.tokenizers import tokenizer
@@ -13,9 +14,11 @@ from keras_hub.src.utils.tensor_utils import preprocessing_function
 
 try:
     import tensorflow as tf
-    import tensorflow_text as tf_text
 except ImportError:
     tf = None
+try:
+    import tensorflow_text as tf_text
+except ImportError:
     tf_text = None
 
 VOCAB_FILENAME = "vocabulary.txt"
@@ -374,6 +377,17 @@ class WordPieceTokenizer(tokenizer.Tokenizer):
             return
 
         if isinstance(vocabulary, str):
+            if serialization_lib.in_safe_mode():
+                raise ValueError(
+                    "Requested the loading of a vocabulary file outside of the "
+                    "model archive. This carries a potential risk of loading "
+                    "arbitrary and sensitive files and thus it is disallowed "
+                    "by default. If you trust the source of the artifact, you "
+                    "can override this error by passing `safe_mode=False` to "
+                    "the loading function, or calling "
+                    "`keras.config.enable_unsafe_deserialization()`. "
+                    f"Vocabulary file: '{vocabulary}'"
+                )
             with open(vocabulary, "r", encoding="utf-8") as file:
                 self.vocabulary = [line.rstrip() for line in file]
         elif isinstance(vocabulary, Iterable):

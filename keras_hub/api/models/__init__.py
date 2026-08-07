@@ -67,8 +67,47 @@ from keras_hub.src.models.bert.bert_text_classifier_preprocessor import (
 from keras_hub.src.models.bert.bert_text_classifier_preprocessor import (
     BertTextClassifierPreprocessor as BertTextClassifierPreprocessor,
 )
+from keras_hub.src.models.bert.bert_text_embedder import (
+    BertTextEmbedder as BertTextEmbedder,
+)
+from keras_hub.src.models.bert.bert_text_embedder_preprocessor import (
+    BertTextEmbedderPreprocessor as BertTextEmbedderPreprocessor,
+)
 from keras_hub.src.models.bert.bert_tokenizer import (
     BertTokenizer as BertTokenizer,
+)
+from keras_hub.src.models.blip2.blip2_backbone import (
+    BLIP2Backbone as BLIP2Backbone,
+)
+from keras_hub.src.models.blip2.blip2_causal_lm import (
+    BLIP2CausalLM as BLIP2CausalLM,
+)
+from keras_hub.src.models.blip2.blip2_causal_lm_preprocessor import (
+    BLIP2CausalLMPreprocessor as BLIP2CausalLMPreprocessor,
+)
+from keras_hub.src.models.blip2.blip2_custom_opt import (
+    BLIP2CustomOPT as BLIP2CustomOPT,
+)
+from keras_hub.src.models.blip2.blip2_flan_t5_lm import (
+    BLIP2FlanT5 as BLIP2FlanT5,
+)
+from keras_hub.src.models.blip2.blip2_flan_t5_tokenizer import (
+    BLIP2FlanT5Tokenizer as BLIP2FlanT5Tokenizer,
+)
+from keras_hub.src.models.blip2.blip2_opt_tokenizer import (
+    BLIP2OPTTokenizer as BLIP2OPTTokenizer,
+)
+from keras_hub.src.models.blip2.blip2_qformer import (
+    BLIP2QFormer as BLIP2QFormer,
+)
+from keras_hub.src.models.blip2.blip2_seq_2_seq_lm import (
+    BLIP2Seq2SeqLM as BLIP2Seq2SeqLM,
+)
+from keras_hub.src.models.blip2.blip2_seq_2_seq_lm_preprocessor import (
+    BLIP2Seq2SeqLMPreprocessor as BLIP2Seq2SeqLMPreprocessor,
+)
+from keras_hub.src.models.blip2.blip2_vision_encoder import (
+    BLIP2VisionEncoder as BLIP2VisionEncoder,
 )
 from keras_hub.src.models.bloom.bloom_backbone import (
     BloomBackbone as BloomBackbone,
@@ -184,6 +223,9 @@ from keras_hub.src.models.depth_estimator_preprocessor import (
 from keras_hub.src.models.dinov2.dinov2_backbone import (
     DINOV2Backbone as DINOV2Backbone,
 )
+from keras_hub.src.models.dinov3.dinov3_backbone import (
+    DINOV3Backbone as DINOV3Backbone,
+)
 from keras_hub.src.models.distil_bert.distil_bert_backbone import (
     DistilBertBackbone as DistilBertBackbone,
 )
@@ -207,6 +249,12 @@ from keras_hub.src.models.distil_bert.distil_bert_text_classifier_preprocessor i
 )
 from keras_hub.src.models.distil_bert.distil_bert_tokenizer import (
     DistilBertTokenizer as DistilBertTokenizer,
+)
+from keras_hub.src.models.edrec.edrec_backbone import (
+    EdRecBackbone as EdRecBackbone,
+)
+from keras_hub.src.models.edrec.edrec_seq2seq_lm import (
+    EdRecSeq2SeqLM as EdRecSeq2SeqLM,
 )
 from keras_hub.src.models.efficientnet.efficientnet_backbone import (
     EfficientNetBackbone as EfficientNetBackbone,
@@ -306,11 +354,50 @@ from keras_hub.src.models.gemma3.gemma3_causal_lm import (
 from keras_hub.src.models.gemma3.gemma3_causal_lm_preprocessor import (
     Gemma3CausalLMPreprocessor as Gemma3CausalLMPreprocessor,
 )
+from keras_hub.src.models.gemma3.gemma3_text_embedder import (
+    Gemma3TextEmbedder as Gemma3TextEmbedder,
+)
+from keras_hub.src.models.gemma3.gemma3_text_embedder_preprocessor import (
+    Gemma3TextEmbedderPreprocessor as Gemma3TextEmbedderPreprocessor,
+)
 from keras_hub.src.models.gemma3.gemma3_tokenizer import (
     Gemma3Tokenizer as Gemma3Tokenizer,
 )
 from keras_hub.src.models.gemma3.gemma3_vision_encoder import (
     Gemma3VisionEncoder as Gemma3VisionEncoder,
+)
+from keras_hub.src.models.gemma3n.gemma3n_backbone import (
+    Gemma3nBackbone as Gemma3nBackbone,
+)
+from keras_hub.src.models.gemma3n.gemma3n_causal_lm import (
+    Gemma3nCausalLM as Gemma3nCausalLM,
+)
+from keras_hub.src.models.gemma3n.gemma3n_causal_lm_preprocessor import (
+    Gemma3nCausalLMPreprocessor as Gemma3nCausalLMPreprocessor,
+)
+from keras_hub.src.models.gemma3n.gemma3n_tokenizer import (
+    Gemma3nTokenizer as Gemma3nTokenizer,
+)
+from keras_hub.src.models.gemma4.gemma4_assistant_causal_lm import (
+    Gemma4AssistantCausalLM as Gemma4AssistantCausalLM,
+)
+from keras_hub.src.models.gemma4.gemma4_audio_encoder import (
+    Gemma4AudioEncoder as Gemma4AudioEncoder,
+)
+from keras_hub.src.models.gemma4.gemma4_backbone import (
+    Gemma4Backbone as Gemma4Backbone,
+)
+from keras_hub.src.models.gemma4.gemma4_causal_lm import (
+    Gemma4CausalLM as Gemma4CausalLM,
+)
+from keras_hub.src.models.gemma4.gemma4_causal_lm_preprocessor import (
+    Gemma4CausalLMPreprocessor as Gemma4CausalLMPreprocessor,
+)
+from keras_hub.src.models.gemma4.gemma4_tokenizer import (
+    Gemma4Tokenizer as Gemma4Tokenizer,
+)
+from keras_hub.src.models.gemma4.gemma4_vision_encoder import (
+    Gemma4VisionEncoder as Gemma4VisionEncoder,
 )
 from keras_hub.src.models.gpt2.gpt2_backbone import GPT2Backbone as GPT2Backbone
 from keras_hub.src.models.gpt2.gpt2_causal_lm import (
@@ -336,6 +423,18 @@ from keras_hub.src.models.gpt_neo_x.gpt_neo_x_causal_lm_preprocessor import (
 )
 from keras_hub.src.models.gpt_neo_x.gpt_neo_x_tokenizer import (
     GPTNeoXTokenizer as GPTNeoXTokenizer,
+)
+from keras_hub.src.models.gpt_oss.gpt_oss_backbone import (
+    GptOssBackbone as GptOssBackbone,
+)
+from keras_hub.src.models.gpt_oss.gpt_oss_causal_lm import (
+    GptOssCausalLM as GptOssCausalLM,
+)
+from keras_hub.src.models.gpt_oss.gpt_oss_causal_lm_preprocessor import (
+    GptOssCausalLMPreprocessor as GptOssCausalLMPreprocessor,
+)
+from keras_hub.src.models.gpt_oss.gpt_oss_tokenizer import (
+    GptOssTokenizer as GptOssTokenizer,
 )
 from keras_hub.src.models.hgnetv2.hgnetv2_backbone import (
     HGNetV2Backbone as HGNetV2Backbone,
@@ -388,6 +487,21 @@ from keras_hub.src.models.masked_lm import MaskedLM as MaskedLM
 from keras_hub.src.models.masked_lm_preprocessor import (
     MaskedLMPreprocessor as MaskedLMPreprocessor,
 )
+from keras_hub.src.models.metaclip_2.metaclip_2_backbone import (
+    MetaCLIP2Backbone as MetaCLIP2Backbone,
+)
+from keras_hub.src.models.metaclip_2.metaclip_2_causal_lm_preprocessor import (
+    MetaCLIP2CausalLMPreprocessor as MetaCLIP2CausalLMPreprocessor,
+)
+from keras_hub.src.models.metaclip_2.metaclip_2_text_encoder import (
+    MetaCLIP2TextEncoder as MetaCLIP2TextEncoder,
+)
+from keras_hub.src.models.metaclip_2.metaclip_2_tokenizer import (
+    MetaCLIP2Tokenizer as MetaCLIP2Tokenizer,
+)
+from keras_hub.src.models.metaclip_2.metaclip_2_vision_encoder import (
+    MetaCLIP2VisionEncoder as MetaCLIP2VisionEncoder,
+)
 from keras_hub.src.models.mistral.mistral_backbone import (
     MistralBackbone as MistralBackbone,
 )
@@ -396,6 +510,9 @@ from keras_hub.src.models.mistral.mistral_causal_lm import (
 )
 from keras_hub.src.models.mistral.mistral_causal_lm_preprocessor import (
     MistralCausalLMPreprocessor as MistralCausalLMPreprocessor,
+)
+from keras_hub.src.models.mistral.mistral_tokenizer import (
+    MistralTekkenTokenizer as MistralTekkenTokenizer,
 )
 from keras_hub.src.models.mistral.mistral_tokenizer import (
     MistralTokenizer as MistralTokenizer,
@@ -533,8 +650,44 @@ from keras_hub.src.models.qwen3.qwen3_causal_lm import (
 from keras_hub.src.models.qwen3.qwen3_causal_lm_preprocessor import (
     Qwen3CausalLMPreprocessor as Qwen3CausalLMPreprocessor,
 )
+from keras_hub.src.models.qwen3.qwen3_text_embedder import (
+    Qwen3TextEmbedder as Qwen3TextEmbedder,
+)
+from keras_hub.src.models.qwen3.qwen3_text_embedder_preprocessor import (
+    Qwen3TextEmbedderPreprocessor as Qwen3TextEmbedderPreprocessor,
+)
 from keras_hub.src.models.qwen3.qwen3_tokenizer import (
     Qwen3Tokenizer as Qwen3Tokenizer,
+)
+from keras_hub.src.models.qwen3_5.qwen3_5_backbone import (
+    Qwen3_5Backbone as Qwen3_5Backbone,
+)
+from keras_hub.src.models.qwen3_5.qwen3_5_causal_lm import (
+    Qwen3_5CausalLM as Qwen3_5CausalLM,
+)
+from keras_hub.src.models.qwen3_5.qwen3_5_causal_lm_preprocessor import (
+    Qwen3_5CausalLMPreprocessor as Qwen3_5CausalLMPreprocessor,
+)
+from keras_hub.src.models.qwen3_5.qwen3_5_tokenizer import (
+    Qwen3_5Tokenizer as Qwen3_5Tokenizer,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_backbone import (
+    Qwen3_5MoeBackbone as Qwen3_5MoeBackbone,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_causal_lm import (
+    Qwen3_5MoeCausalLM as Qwen3_5MoeCausalLM,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_causal_lm_preprocessor import (
+    Qwen3_5MoeCausalLMPreprocessor as Qwen3_5MoeCausalLMPreprocessor,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_image_converter import (
+    Qwen3_5MoeImageConverter as Qwen3_5MoeImageConverter,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_tokenizer import (
+    Qwen3_5MoeTokenizer as Qwen3_5MoeTokenizer,
+)
+from keras_hub.src.models.qwen3_5_moe.qwen3_5_moe_video_converter import (
+    Qwen3_5MoeVideoConverter as Qwen3_5MoeVideoConverter,
 )
 from keras_hub.src.models.qwen3_moe.qwen3_moe_backbone import (
     Qwen3MoeBackbone as Qwen3MoeBackbone,
@@ -545,6 +698,9 @@ from keras_hub.src.models.qwen3_moe.qwen3_moe_causal_lm import (
 from keras_hub.src.models.qwen3_moe.qwen3_moe_causal_lm_preprocessor import (
     Qwen3MoeCausalLMPreprocessor as Qwen3MoeCausalLMPreprocessor,
 )
+from keras_hub.src.models.qwen3_moe.qwen3_moe_tokenizer import (
+    Qwen3MoeTokenizer as Qwen3MoeTokenizer,
+)
 from keras_hub.src.models.qwen_moe.qwen_moe_backbone import (
     QwenMoeBackbone as QwenMoeBackbone,
 )
@@ -553,6 +709,9 @@ from keras_hub.src.models.qwen_moe.qwen_moe_causal_lm import (
 )
 from keras_hub.src.models.qwen_moe.qwen_moe_causal_lm_preprocessor import (
     QwenMoeCausalLMPreprocessor as QwenMoeCausalLMPreprocessor,
+)
+from keras_hub.src.models.qwen_moe.qwen_moe_tokenizer import (
+    QwenMoeTokenizer as QwenMoeTokenizer,
 )
 from keras_hub.src.models.resnet.resnet_backbone import (
     ResNetBackbone as ResNetBackbone,
@@ -614,12 +773,36 @@ from keras_hub.src.models.roformer_v2.roformer_v2_text_classifier_preprocessor i
 from keras_hub.src.models.roformer_v2.roformer_v2_tokenizer import (
     RoformerV2Tokenizer as RoformerV2Tokenizer,
 )
+from keras_hub.src.models.rwkv7.rwkv7_backbone import (
+    RWKV7Backbone as RWKV7Backbone,
+)
+from keras_hub.src.models.rwkv7.rwkv7_causal_lm import (
+    RWKV7CausalLM as RWKV7CausalLM,
+)
+from keras_hub.src.models.rwkv7.rwkv7_causal_lm_preprocessor import (
+    RWKV7CausalLMPreprocessor as RWKV7CausalLMPreprocessor,
+)
+from keras_hub.src.models.rwkv7.rwkv7_tokenizer import (
+    RWKVTokenizer as RWKVTokenizer,
+)
 from keras_hub.src.models.sam.sam_backbone import SAMBackbone as SAMBackbone
 from keras_hub.src.models.sam.sam_image_segmenter import (
     SAMImageSegmenter as SAMImageSegmenter,
 )
 from keras_hub.src.models.sam.sam_image_segmenter_preprocessor import (
     SAMImageSegmenterPreprocessor as SAMImageSegmenterPreprocessor,
+)
+from keras_hub.src.models.sam3.sam3_pc_backbone import (
+    SAM3PromptableConceptBackbone as SAM3PromptableConceptBackbone,
+)
+from keras_hub.src.models.sam3.sam3_pc_image_segmenter import (
+    SAM3PromptableConceptImageSegmenter as SAM3PromptableConceptImageSegmenter,
+)
+from keras_hub.src.models.sam3.sam3_pc_image_segmenter_preprocessor import (
+    SAM3PromptableConceptImageSegmenterPreprocessor as SAM3PromptableConceptImageSegmenterPreprocessor,
+)
+from keras_hub.src.models.sam3.sam3_tokenizer import (
+    SAM3Tokenizer as SAM3Tokenizer,
 )
 from keras_hub.src.models.segformer.segformer_backbone import (
     SegFormerBackbone as SegFormerBackbone,
@@ -688,6 +871,15 @@ from keras_hub.src.models.stable_diffusion_3.stable_diffusion_3_text_to_image im
 from keras_hub.src.models.stable_diffusion_3.stable_diffusion_3_text_to_image_preprocessor import (
     StableDiffusion3TextToImagePreprocessor as StableDiffusion3TextToImagePreprocessor,
 )
+from keras_hub.src.models.swin_transformer.swin_transformer_backbone import (
+    SwinTransformerBackbone as SwinTransformerBackbone,
+)
+from keras_hub.src.models.swin_transformer.swin_transformer_image_classifier import (
+    SwinTransformerImageClassifier as SwinTransformerImageClassifier,
+)
+from keras_hub.src.models.swin_transformer.swin_transformer_image_classifier_preprocessor import (
+    SwinTransformerImageClassifierPreprocessor as SwinTransformerImageClassifierPreprocessor,
+)
 from keras_hub.src.models.t5.t5_backbone import T5Backbone as T5Backbone
 from keras_hub.src.models.t5.t5_preprocessor import (
     T5Preprocessor as T5Preprocessor,
@@ -705,6 +897,18 @@ from keras_hub.src.models.t5gemma.t5gemma_seq_2_seq_lm_preprocessor import (
 from keras_hub.src.models.t5gemma.t5gemma_tokenizer import (
     T5GemmaTokenizer as T5GemmaTokenizer,
 )
+from keras_hub.src.models.t5gemma2.t5gemma2_backbone import (
+    T5Gemma2Backbone as T5Gemma2Backbone,
+)
+from keras_hub.src.models.t5gemma2.t5gemma2_seq_2_seq_lm import (
+    T5Gemma2Seq2SeqLM as T5Gemma2Seq2SeqLM,
+)
+from keras_hub.src.models.t5gemma2.t5gemma2_seq_2_seq_lm_preprocessor import (
+    T5Gemma2Seq2SeqLMPreprocessor as T5Gemma2Seq2SeqLMPreprocessor,
+)
+from keras_hub.src.models.t5gemma2.t5gemma2_tokenizer import (
+    T5Gemma2Tokenizer as T5Gemma2Tokenizer,
+)
 from keras_hub.src.models.task import Task as Task
 from keras_hub.src.models.text_classifier import TextClassifier as Classifier
 from keras_hub.src.models.text_classifier import (
@@ -712,6 +916,10 @@ from keras_hub.src.models.text_classifier import (
 )
 from keras_hub.src.models.text_classifier_preprocessor import (
     TextClassifierPreprocessor as TextClassifierPreprocessor,
+)
+from keras_hub.src.models.text_embedder import TextEmbedder as TextEmbedder
+from keras_hub.src.models.text_embedder_preprocessor import (
+    TextEmbedderPreprocessor as TextEmbedderPreprocessor,
 )
 from keras_hub.src.models.text_to_image import TextToImage as TextToImage
 from keras_hub.src.models.text_to_image_preprocessor import (
@@ -723,6 +931,12 @@ from keras_hub.src.models.vgg.vgg_image_classifier import (
 )
 from keras_hub.src.models.vgg.vgg_image_classifier_preprocessor import (
     VGGImageClassifierPreprocessor as VGGImageClassifierPreprocessor,
+)
+from keras_hub.src.models.video_prism.video_prism_backbone import (
+    VideoPrismBackbone as VideoPrismBackbone,
+)
+from keras_hub.src.models.video_prism.video_prism_tokenizer import (
+    VideoPrismTokenizer as VideoPrismTokenizer,
 )
 from keras_hub.src.models.vit.vit_backbone import ViTBackbone as ViTBackbone
 from keras_hub.src.models.vit.vit_image_classifier import (
@@ -769,6 +983,12 @@ from keras_hub.src.models.xlm_roberta.xlm_roberta_text_classifier_preprocessor i
 )
 from keras_hub.src.models.xlm_roberta.xlm_roberta_text_classifier_preprocessor import (
     XLMRobertaTextClassifierPreprocessor as XLMRobertaTextClassifierPreprocessor,
+)
+from keras_hub.src.models.xlm_roberta.xlm_roberta_text_embedder import (
+    XLMRobertaTextEmbedder as XLMRobertaTextEmbedder,
+)
+from keras_hub.src.models.xlm_roberta.xlm_roberta_text_embedder_preprocessor import (
+    XLMRobertaTextEmbedderPreprocessor as XLMRobertaTextEmbedderPreprocessor,
 )
 from keras_hub.src.models.xlm_roberta.xlm_roberta_tokenizer import (
     XLMRobertaTokenizer as XLMRobertaTokenizer,

@@ -1,5 +1,6 @@
 import keras
 import tensorflow as tf
+from keras.src.saving import serialization_lib
 
 from keras_hub.src.tests.test_case import TestCase
 from keras_hub.src.tokenizers.byte_pair_tokenizer import BytePairTokenizer
@@ -173,3 +174,86 @@ class BytePairTokenizerTest(TestCase):
             self.tokenizer(input_data),
             cloned_tokenizer(input_data),
         )
+
+    def test_safe_mode_vocabulary_file_disallowed(self):
+        import os
+
+        temp_dir = self.get_temp_dir()
+        vocab_path = os.path.join(temp_dir, "vocab.json")
+        merges_path = os.path.join(temp_dir, "merges.txt")
+
+        with open(vocab_path, "w") as file:
+            file.write('{"<|endoftext|>": 0, "the": 1, "quick": 2}')
+        with open(merges_path, "w") as file:
+            file.write("t h\nthe quick")
+
+        tokenizer = BytePairTokenizer()
+        with serialization_lib.SafeModeScope(True):
+            with self.assertRaisesRegex(
+                ValueError,
+                r"Requested the loading of a vocabulary file outside of the "
+                r"model archive.*Vocabulary file: .*vocab\.json",
+            ):
+                tokenizer.set_vocabulary_and_merges(vocab_path, merges_path)
+
+
+class BytePairTokenizerTFTest(BytePairTokenizerTest):
+    """Set `_allow_python_workflow=False` to test TF execution."""
+
+    def setUp(self):
+        super().setUp()
+        self.tokenizer = BytePairTokenizer(
+            vocabulary=VOCAB_PATH,
+            merges=MERGE_PATH,
+            _allow_python_workflow=False,
+        )
+
+    def test_tokenize_string_output(self):
+        input_data = ["quick brown fox.", "slow black bear."]
+        tokenizer = BytePairTokenizer(
+            vocabulary=VOCAB_PATH,
+            merges=MERGE_PATH,
+            dtype="string",
+            _allow_python_workflow=False,
+        )
+        call_output = tokenizer(input_data)
+        expected = [
+            ["quick", "Ġbrown", "Ġfox", "."],
+            ["slow", "Ġblack", "Ġbear", "."],
+        ]
+        self.assertAllEqual(call_output, expected)
+
+    def test_tokenize_with_special_tokens(self):
+        vocab = {"sp": 0, "s": 1, "p": 2}
+        merges = ["s p"]
+        tokenizer = BytePairTokenizer(
+            vocabulary=vocab,
+            merges=merges,
+            unsplittable_tokens=["s", "p"],
+            _allow_python_workflow=False,
+        )
+        output = tokenizer("sp")
+        self.assertAllEqual(output, [1, 2])
+
+        # If not setting special tokens, "sp" is one token.
+        tokenizer = BytePairTokenizer(
+            vocabulary=vocab,
+            merges=merges,
+            _allow_python_workflow=False,
+        )
+        output = tokenizer("sp")
+        self.assertAllEqual(output, [0])
+
+    def test_tokenize_prefix_space(self):
+        input_data = ["brown.", "black."]
+        tokenizer = BytePairTokenizer(
+            vocabulary=VOCAB_PATH,
+            merges=MERGE_PATH,
+            dtype="string",
+            add_prefix_space=True,
+            _allow_python_workflow=False,
+        )
+        call_output = tokenizer(input_data)
+
+        expected = [["Ġbrown", "."], ["Ġblack", "."]]
+        self.assertAllEqual(call_output, expected)
